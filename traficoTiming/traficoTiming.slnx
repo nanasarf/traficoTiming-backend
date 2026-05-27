@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="TraficoTiming.Api/TraficoTiming.Api.csproj" />
+  <Project Path="TraficoTiming.Database/TraficoTiming.Database.csproj" />
+  <Project Path="TraficoTiming.Repository/TraficoTiming.Repository.csproj" />
+  <Project Path="TraficoTiming.Services/TraficoTiming.Services.csproj" />
+</Solution>
