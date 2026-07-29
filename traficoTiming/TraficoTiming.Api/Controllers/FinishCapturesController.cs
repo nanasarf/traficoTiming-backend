@@ -32,6 +32,7 @@ public class FinishCapturesController : ControllerBase
             FrameRate = request.FrameRate,
             Resolution = request.Resolution,
             RecordingStartedAtUtc = request.RecordingStartedAtUtc,
+            RecordingEndedAtUtc = request.RecordingEndedAtUtc,
             FinishLineCalibrationDataJson = request.FinishLineCalibrationDataJson
         };
 

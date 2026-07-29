@@ -13,3 +13,4 @@ public class StartRaceRequest
     public bool GunSoundPlayed { get; set; }
     public bool FlashTriggered { get; set; }
 }
+

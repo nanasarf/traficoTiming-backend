@@ -30,7 +30,8 @@ public class TimingDevicesController : ControllerBase
             DeviceName = request.DeviceName,
             DeviceRole = request.DeviceRole,
             DeviceType = request.DeviceType,
-            ConnectionType = request.ConnectionType
+            ConnectionType = request.ConnectionType,
+            BatteryLevel = request.BatteryLevel
         };
 
         var device = await _devicePairingService.PairDeviceAsync(model, cancellationToken);

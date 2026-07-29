@@ -1,5 +1,5 @@
 namespace TraficoTiming.Api.Models.Requests;
 
 public record UpdateRawTimingResultRequest(
-    double? AdjustedTimeSeconds,
+    decimal? AdjustedTimeSeconds,
     string? ReviewerNote);

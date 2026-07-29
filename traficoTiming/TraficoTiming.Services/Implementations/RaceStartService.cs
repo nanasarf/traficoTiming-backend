@@ -33,7 +33,7 @@ public class RaceStartService(
         {
             TimingSessionId   = model.TimingSessionId,
             StarterDeviceId   = model.StarterDeviceId,
-            StartTimestampUtc = DateTime.UtcNow,
+            StartTimestampUtc = model.StartTimestampUtc,
             StartMethod       = model.StartMethod,
             GunSoundPlayed    = model.GunSoundPlayed,
             FlashTriggered    = model.FlashTriggered

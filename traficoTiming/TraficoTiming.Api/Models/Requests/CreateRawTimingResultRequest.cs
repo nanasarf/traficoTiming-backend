@@ -18,5 +18,5 @@ public class CreateRawTimingResultRequest
 
     public decimal? ConfidenceScore { get; set; }
 
-    public int? FrameNumber { get; set; }
+    public long? FrameNumber { get; set; }
 }

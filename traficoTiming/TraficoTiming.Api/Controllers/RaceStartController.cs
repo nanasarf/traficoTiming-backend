@@ -28,6 +28,7 @@ public class RaceStartController : ControllerBase
         {
             TimingSessionId = sessionId,
             StarterDeviceId = request.StarterDeviceId,
+            StartTimestampUtc = request.StartTimestampUtc,
             StartMethod = request.StartMethod,
             GunSoundPlayed = request.GunSoundPlayed,
             FlashTriggered = request.FlashTriggered

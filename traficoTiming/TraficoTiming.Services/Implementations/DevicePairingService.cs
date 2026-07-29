@@ -32,6 +32,7 @@ public class DevicePairingService(
             DeviceRole      = model.DeviceRole,
             DeviceType      = model.DeviceType,
             ConnectionType  = model.ConnectionType,
+            BatteryLevel    = model.BatteryLevel,
             Status          = DeviceStatus.Connected
         };
         await deviceRepo.CreateAsync(device, ct);

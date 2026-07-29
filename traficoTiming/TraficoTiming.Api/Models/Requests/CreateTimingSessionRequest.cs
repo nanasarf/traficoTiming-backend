@@ -4,5 +4,5 @@ public record CreateTimingSessionRequest(
     Guid MeetId,
     Guid EventId,
     int HeatNumber,
-    int Round,
+    string? Round,
     Guid CreatedByUserId);

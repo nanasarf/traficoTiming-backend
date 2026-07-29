@@ -6,6 +6,7 @@ public class StartRaceModel
 {
     public Guid TimingSessionId { get; set; }
     public Guid StarterDeviceId { get; set; }
+    public DateTime StartTimestampUtc { get; set; }
     public StartMethod StartMethod { get; set; }
     public bool GunSoundPlayed { get; set; }
     public bool FlashTriggered { get; set; }

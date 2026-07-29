@@ -3,4 +3,5 @@
   <Project Path="TraficoTiming.Database/TraficoTiming.Database.csproj" />
   <Project Path="TraficoTiming.Repository/TraficoTiming.Repository.csproj" />
   <Project Path="TraficoTiming.Services/TraficoTiming.Services.csproj" />
+  <Project Path="TraficoTiming.Tests/TraficoTiming.Tests.csproj" />
 </Solution>

@@ -17,7 +17,7 @@ public class TimingSessionService(
             MeetId          = model.MeetId,
             EventId         = model.EventId,
             HeatNumber      = model.HeatNumber,
-            Round           = model.Round.ToString(),
+            Round           = model.Round,
             CreatedByUserId = model.CreatedByUserId,
             Status          = SessionStatus.Created
         };

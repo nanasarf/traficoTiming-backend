@@ -13,27 +13,28 @@ public class ClockSyncService(
 {
     public async Task<ClockSyncRecord> SyncClocksAsync(ClockSyncModel model, CancellationToken ct = default)
     {
-        var qualityScore = CalculateQualityScore(model.RoundTripDelayMs, model.DriftMs);
+        if (model.SyncQualityScore is < 0 or > 100)
+            throw new ArgumentOutOfRangeException(nameof(model.SyncQualityScore), "SyncQualityScore must be between 0 and 100.");
 
         var record = new ClockSyncRecord
         {
             TimingSessionId  = model.TimingSessionId,
             StarterDeviceId  = model.StarterDeviceId,
             FinishDeviceId   = model.FinishDeviceId,
-            OffsetMs         = (decimal)model.OffsetMs,
-            RoundTripDelayMs = (decimal)model.RoundTripDelayMs,
-            DriftMs          = (decimal?)model.DriftMs,
-            SyncQualityScore = (decimal)qualityScore
+            OffsetMs         = model.OffsetMs,
+            RoundTripDelayMs = model.RoundTripDelayMs,
+            DriftMs          = model.DriftMs,
+            SyncQualityScore = model.SyncQualityScore
         };
         await clockSyncRepo.CreateAsync(record, ct);
 
         // Promote session to Ready when sync quality is Fair or better (>= 70)
-        if (qualityScore >= 70)
+        if (model.SyncQualityScore >= 70)
         {
             var session = await sessionRepo.GetByIdAsync(model.TimingSessionId, ct);
             if (session?.Status == SessionStatus.DevicesPaired)
             {
-                session.SyncQualityScore = (decimal?)qualityScore;
+                session.SyncQualityScore = model.SyncQualityScore;
                 await sessionRepo.UpdateStatusAsync(model.TimingSessionId, SessionStatus.Ready, ct);
             }
         }
@@ -43,11 +44,4 @@ public class ClockSyncService(
 
     public Task<ClockSyncRecord?> GetLatestSyncAsync(Guid sessionId, CancellationToken ct = default) =>
         clockSyncRepo.GetLatestSyncAsync(sessionId, ct);
-
-    private static double CalculateQualityScore(long roundTripDelayMs, long driftMs)
-    {
-        double delayPenalty = Math.Min(roundTripDelayMs / 2.0, 50);
-        double driftPenalty = Math.Min(Math.Abs(driftMs) / 2.0, 50);
-        return Math.Max(0, 100 - delayPenalty - driftPenalty);
-    }
 }

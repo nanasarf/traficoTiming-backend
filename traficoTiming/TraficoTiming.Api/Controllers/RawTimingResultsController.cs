@@ -28,13 +28,13 @@ public class RawTimingResultsController : ControllerBase
         {
             TimingSessionId = sessionId,
             AthleteId = request.AthleteId,
-            Lane = request.Lane ?? 0,
+            Lane = request.Lane,
             BibNumber = request.BibNumber,
             DetectedFinishTimestampUtc = request.DetectedFinishTimestampUtc,
-            RawTimeSeconds = (double)request.RawTimeSeconds,
-            AdjustedTimeSeconds = (double?)request.AdjustedTimeSeconds,
+            RawTimeSeconds = request.RawTimeSeconds,
+            AdjustedTimeSeconds = request.AdjustedTimeSeconds,
             DetectionMethod = request.DetectionMethod,
-            ConfidenceScore = (double?)request.ConfidenceScore,
+            ConfidenceScore = request.ConfidenceScore,
             FrameNumber = request.FrameNumber
         };
 
@@ -73,7 +73,7 @@ public class RawTimingResultsController : ControllerBase
         var model = new UpdateRawTimingResultModel
         {
             ResultId = resultId,
-            AdjustedTimeSeconds = request.AdjustedTimeSeconds.HasValue ? (double?)request.AdjustedTimeSeconds.Value : null,
+            AdjustedTimeSeconds = request.AdjustedTimeSeconds,
             ReviewerNote = request.ReviewerNote
         };
 

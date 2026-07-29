@@ -18,7 +18,9 @@ public class RawTimingResultService(
             throw new ArgumentException("AdjustedTimeSeconds must be greater than 0.");
         if (model.ConfidenceScore.HasValue && (model.ConfidenceScore < 0 || model.ConfidenceScore > 100))
             throw new ArgumentException("ConfidenceScore must be between 0 and 100.");
-        if (await resultRepo.LaneExistsInSessionAsync(model.TimingSessionId, model.Lane, ct))
+        if (model.FrameNumber is < int.MinValue or > int.MaxValue)
+            throw new ArgumentOutOfRangeException(nameof(model.FrameNumber), "FrameNumber must fit in a 32-bit integer.");
+        if (model.Lane.HasValue && await resultRepo.LaneExistsInSessionAsync(model.TimingSessionId, model.Lane.Value, ct))
             throw new InvalidOperationException($"Lane {model.Lane} already has a result in this session.");
 
         var result = new RawTimingResult
@@ -28,11 +30,11 @@ public class RawTimingResultService(
             Lane                       = model.Lane,
             BibNumber                  = model.BibNumber,
             DetectedFinishTimestampUtc = model.DetectedFinishTimestampUtc ?? DateTime.UtcNow,
-            RawTimeSeconds             = (decimal)model.RawTimeSeconds,
-            AdjustedTimeSeconds        = (decimal)(model.AdjustedTimeSeconds ?? model.RawTimeSeconds),
+            RawTimeSeconds             = model.RawTimeSeconds,
+            AdjustedTimeSeconds        = model.AdjustedTimeSeconds ?? model.RawTimeSeconds,
             DetectionMethod            = model.DetectionMethod,
-            ConfidenceScore            = (decimal?)model.ConfidenceScore,
-            FrameNumber                = (int?)model.FrameNumber,
+            ConfidenceScore            = model.ConfidenceScore,
+            FrameNumber                = model.FrameNumber.HasValue ? (int)model.FrameNumber.Value : null,
             Status                     = RawResultStatus.Pending
         };
         await resultRepo.CreateRawResultAsync(result, ct);
@@ -54,7 +56,7 @@ public class RawTimingResultService(
         if (model.AdjustedTimeSeconds.HasValue && model.AdjustedTimeSeconds <= 0)
             throw new ArgumentException("AdjustedTimeSeconds must be greater than 0.");
 
-        if (model.AdjustedTimeSeconds.HasValue) result.AdjustedTimeSeconds = (decimal)model.AdjustedTimeSeconds;
+        if (model.AdjustedTimeSeconds.HasValue) result.AdjustedTimeSeconds = model.AdjustedTimeSeconds.Value;
         if (model.ReviewerNote is not null)      result.ReviewerNote = model.ReviewerNote;
         result.Status = RawResultStatus.Reviewed;
 

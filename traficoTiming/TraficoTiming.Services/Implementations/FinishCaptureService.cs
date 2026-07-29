@@ -17,10 +17,10 @@ public class FinishCaptureService(
             TimingSessionId               = model.TimingSessionId,
             FinishDeviceId                = model.FinishDeviceId,
             LocalFileId                   = model.LocalFileId,
-            FrameRate                     = (decimal)(model.FrameRate ?? 0),
+            FrameRate                     = model.FrameRate ?? 0,
             Resolution                    = model.Resolution ?? string.Empty,
             RecordingStartedAtUtc         = model.RecordingStartedAtUtc ?? DateTime.UtcNow,
-            RecordingEndedAtUtc           = DateTime.UtcNow,
+            RecordingEndedAtUtc           = model.RecordingEndedAtUtc,
             FinishLineCalibrationDataJson = model.FinishLineCalibrationDataJson,
             UploadStatus                  = UploadStatus.LocalOnly
         };

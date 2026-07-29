@@ -29,9 +29,10 @@ public class ClockSyncController : ControllerBase
             TimingSessionId = sessionId,
             StarterDeviceId = request.StarterDeviceId,
             FinishDeviceId = request.FinishDeviceId,
-            OffsetMs = (long)request.OffsetMs,
-            RoundTripDelayMs = (long)request.RoundTripDelayMs,
-            DriftMs = request.DriftMs.HasValue ? (long)request.DriftMs.Value : 0
+            OffsetMs = request.OffsetMs,
+            RoundTripDelayMs = request.RoundTripDelayMs,
+            DriftMs = request.DriftMs,
+            SyncQualityScore = request.SyncQualityScore
         };
 
         var sync = await _clockSyncService.SyncClocksAsync(model, cancellationToken);
