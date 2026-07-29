@@ -1,6 +1,7 @@
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi.Models;
+using TraficoTiming.Api.ExceptionHandling;
 using TraficoTiming.Api.Validation;
 using TraficoTiming.Database;
 using TraficoTiming.Repository;
@@ -8,6 +9,8 @@ using TraficoTiming.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.Services.AddProblemDetails();
+builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.Configure<RequestValidationOptions>(
     builder.Configuration.GetSection(RequestValidationOptions.SectionName));
 builder.Services.AddValidatorsFromAssemblyContaining<CreateTimingSessionRequestValidator>();
@@ -53,6 +56,8 @@ builder.Services.AddRepositories();
 builder.Services.AddServices();
 
 var app = builder.Build();
+
+app.UseExceptionHandler();
 
 // Enable Swagger in all environments for easier testing
 app.UseSwagger();
