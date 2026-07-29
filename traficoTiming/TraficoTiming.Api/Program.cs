@@ -1,12 +1,25 @@
+using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi.Models;
+using TraficoTiming.Api.Validation;
 using TraficoTiming.Database;
 using TraficoTiming.Repository;
 using TraficoTiming.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddControllers();
+builder.Services.Configure<RequestValidationOptions>(
+    builder.Configuration.GetSection(RequestValidationOptions.SectionName));
+builder.Services.AddValidatorsFromAssemblyContaining<CreateTimingSessionRequestValidator>();
+builder.Services.AddScoped<RequestValidationFilter>();
+builder.Services.AddControllers(options =>
+{
+    options.Filters.AddService<RequestValidationFilter>();
+})
+.ConfigureApiBehaviorOptions(options =>
+{
+    options.InvalidModelStateResponseFactory = ValidationResponse.Create;
+});
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {

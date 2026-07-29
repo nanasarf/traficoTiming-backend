@@ -7,4 +7,5 @@ public record CreateFinishCaptureRequest(
     string? Resolution,
     DateTime? RecordingStartedAtUtc,
     DateTime RecordingEndedAtUtc,
-    string? FinishLineCalibrationDataJson);
+    string? FinishLineCalibrationDataJson,
+    string? VideoFileUrl = null);
