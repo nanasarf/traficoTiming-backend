@@ -58,6 +58,7 @@ public class ClockSyncService(
         await deviceRepo.UpdateAsync(starter, ct);
         await deviceRepo.UpdateAsync(finish, ct);
 
+        var previousStatus = session.Status;
         session.SyncQualityScore = model.SyncQualityScore;
         if (model.SyncQualityScore >= ReadinessThreshold && session.Status != SessionStatus.Ready)
         {
@@ -76,6 +77,24 @@ public class ClockSyncService(
 
         await sessionRepo.UpdateAsync(session, ct);
         await clockSyncRepo.CreateAsync(record, ct);
+        await auditLog.LogAsync(model.TimingSessionId, AuditActions.ClockSyncRecorded, model.FinishDeviceId,
+            details: new
+            {
+                syncQuality = model.SyncQualityScore,
+                starterDeviceId = model.StarterDeviceId,
+                finishDeviceId = model.FinishDeviceId
+            }, ct: ct);
+        if (previousStatus != SessionStatus.Ready && session.Status == SessionStatus.Ready)
+        {
+            await auditLog.LogAsync(model.TimingSessionId, AuditActions.SessionMarkedReady,
+                details: new
+                {
+                    previousStatus = previousStatus.ToString(),
+                    newStatus = session.Status.ToString(),
+                    reason = "accepted clock synchronization",
+                    syncQuality = model.SyncQualityScore
+                }, ct: ct);
+        }
         return record;
     }
 

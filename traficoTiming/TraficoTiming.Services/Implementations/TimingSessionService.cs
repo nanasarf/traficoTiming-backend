@@ -22,6 +22,8 @@ public class TimingSessionService(
             Status          = SessionStatus.Created
         };
         await sessionRepo.CreateAsync(session, ct);
+        await auditLog.LogAsync(session.Id, AuditActions.SessionCreated, userId: session.CreatedByUserId,
+            details: new { status = session.Status.ToString() }, ct: ct);
         return session;
     }
 
@@ -38,9 +40,17 @@ public class TimingSessionService(
         if (session.Status is SessionStatus.Cancelled or SessionStatus.Completed)
             throw new InvalidOperationException($"Session is already {session.Status}.");
 
+        var previousStatus = session.Status;
         session.Status     = SessionStatus.Completed;
         session.EndedAtUtc = DateTime.UtcNow;
         await sessionRepo.UpdateAsync(session, ct);
+        await auditLog.LogAsync(session.Id, AuditActions.SessionCompleted, userId: session.CreatedByUserId,
+            details: new
+            {
+                previousStatus = previousStatus.ToString(),
+                newStatus = session.Status.ToString(),
+                reason = "session completed"
+            }, ct: ct);
         return session;
     }
 
@@ -50,9 +60,17 @@ public class TimingSessionService(
         if (session.Status == SessionStatus.Completed)
             throw new InvalidOperationException("A completed session cannot be cancelled.");
 
+        var previousStatus = session.Status;
         session.Status     = SessionStatus.Cancelled;
         session.EndedAtUtc = DateTime.UtcNow;
         await sessionRepo.UpdateAsync(session, ct);
+        await auditLog.LogAsync(session.Id, AuditActions.SessionCancelled, userId: session.CreatedByUserId,
+            details: new
+            {
+                previousStatus = previousStatus.ToString(),
+                newStatus = session.Status.ToString(),
+                reason = "session cancelled"
+            }, ct: ct);
         return session;
     }
 }

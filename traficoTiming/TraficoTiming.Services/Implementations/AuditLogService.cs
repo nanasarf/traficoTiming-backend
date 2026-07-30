@@ -7,6 +7,8 @@ namespace TraficoTiming.Services.Implementations;
 
 public class AuditLogService(ITimingAuditLogRepository auditRepo) : IAuditLogService
 {
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+
     public async Task LogAsync(Guid sessionId, string action, Guid? deviceId = null, Guid? userId = null, object? details = null, CancellationToken ct = default)
     {
         var log = new TimingAuditLog
@@ -15,7 +17,8 @@ public class AuditLogService(ITimingAuditLogRepository auditRepo) : IAuditLogSer
             Action          = action,
             DeviceId        = deviceId,
             UserId          = userId,
-            DetailsJson     = details is not null ? JsonSerializer.Serialize(details) : null
+            DetailsJson     = details is not null ? JsonSerializer.Serialize(details, JsonOptions) : null,
+            CreatedAtUtc    = DateTime.UtcNow
         };
         await auditRepo.CreateAsync(log, ct);
     }

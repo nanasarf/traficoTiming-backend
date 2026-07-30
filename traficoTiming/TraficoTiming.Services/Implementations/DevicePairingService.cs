@@ -39,8 +39,25 @@ public class DevicePairingService(
 
         var hasStarter = await deviceRepo.RoleExistsInSessionAsync(model.TimingSessionId, DeviceRole.Starter, ct);
         var hasFinish  = await deviceRepo.RoleExistsInSessionAsync(model.TimingSessionId, DeviceRole.Finish, ct);
+        SessionStatus? previousStatus = null;
+        SessionStatus? newStatus = null;
+        string? reason = null;
         if (hasStarter && hasFinish && session.Status == SessionStatus.Created)
+        {
+            previousStatus = session.Status;
+            newStatus = SessionStatus.DevicesPaired;
+            reason = "second required device paired";
             await sessionRepo.UpdateStatusAsync(model.TimingSessionId, SessionStatus.DevicesPaired, ct);
+        }
+        await auditLog.LogAsync(model.TimingSessionId, AuditActions.DevicePaired, device.Id,
+            details: new
+            {
+                deviceRole = device.DeviceRole.ToString(),
+                connectionType = device.ConnectionType.ToString(),
+                previousStatus = previousStatus?.ToString(),
+                newStatus = newStatus?.ToString(),
+                reason
+            }, ct: ct);
 
         return device;
     }
@@ -55,6 +72,8 @@ public class DevicePairingService(
         device.LastSyncedAtUtc = DateTime.UtcNow;
         device.BatteryLevel    = (int?)batteryLevel;
         await deviceRepo.UpdateAsync(device, ct);
+        await auditLog.LogAsync(device.TimingSessionId, AuditActions.DeviceHeartbeatUpdated, device.Id,
+            details: new { batteryLevel = device.BatteryLevel }, ct: ct);
     }
 
     public async Task DisconnectDeviceAsync(Guid deviceId, CancellationToken ct = default)
@@ -66,10 +85,16 @@ public class DevicePairingService(
 
         var session = await sessionRepo.GetByIdAsync(device.TimingSessionId, ct);
         if (session is null || session.Status == SessionStatus.Running)
+        {
+            await LogDisconnectedAsync(device, null, null, null, ct);
             return;
+        }
 
         if (session.Status is not (SessionStatus.DevicesPaired or SessionStatus.Ready))
+        {
+            await LogDisconnectedAsync(device, null, null, null, ct);
             return;
+        }
 
         var devices = await deviceRepo.GetDevicesBySessionAsync(device.TimingSessionId, ct);
         var hasStarter = devices.Any(d => d.DeviceRole == DeviceRole.Starter);
@@ -79,12 +104,34 @@ public class DevicePairingService(
         var hasConnectedFinish = devices.Any(d =>
             d.DeviceRole == DeviceRole.Finish && d.Status == DeviceStatus.Connected);
 
+        SessionStatus? previousStatus = null;
+        SessionStatus? newStatus = null;
+        string? reason = null;
         if (session.Status == SessionStatus.Ready && (!hasConnectedStarter || !hasConnectedFinish))
         {
+            previousStatus = session.Status;
             session.Status = hasStarter && hasFinish
                 ? SessionStatus.DevicesPaired
                 : SessionStatus.Created;
+            newStatus = session.Status;
+            reason = "required device disconnected";
             await sessionRepo.UpdateAsync(session, ct);
         }
+        await LogDisconnectedAsync(device, previousStatus, newStatus, reason, ct);
     }
+
+    private Task LogDisconnectedAsync(
+        TimingDevice device,
+        SessionStatus? previousStatus,
+        SessionStatus? newStatus,
+        string? reason,
+        CancellationToken ct) =>
+        auditLog.LogAsync(device.TimingSessionId, AuditActions.DeviceDisconnected, device.Id,
+            details: new
+            {
+                deviceRole = device.DeviceRole.ToString(),
+                previousStatus = previousStatus?.ToString(),
+                newStatus = newStatus?.ToString(),
+                reason
+            }, ct: ct);
 }

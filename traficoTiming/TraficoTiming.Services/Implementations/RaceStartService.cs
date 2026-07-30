@@ -62,9 +62,19 @@ public class RaceStartService(
         };
         await raceStartRepo.CreateAsync(raceStart, ct);
 
+        var previousStatus = session.Status;
         session.Status       = SessionStatus.Running;
         session.StartedAtUtc = raceStart.StartTimestampUtc;
         await sessionRepo.UpdateAsync(session, ct);
+        await auditLog.LogAsync(session.Id, AuditActions.RaceStarted, raceStart.StarterDeviceId,
+            details: new
+            {
+                previousStatus = previousStatus.ToString(),
+                newStatus = session.Status.ToString(),
+                reason = "race started",
+                startTimestamp = raceStart.StartTimestampUtc,
+                startMethod = raceStart.StartMethod.ToString()
+            }, ct: ct);
 
         return raceStart;
     }

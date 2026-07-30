@@ -53,12 +53,32 @@ public class FinishCaptureService(
             UploadStatus                  = UploadStatus.LocalOnly
         };
         await captureRepo.CreateAsync(capture, ct);
+        await auditLog.LogAsync(capture.TimingSessionId, AuditActions.FinishCaptureCreated, capture.FinishDeviceId,
+            details: new
+            {
+                captureId = capture.Id,
+                recordingStartedAtUtc = capture.RecordingStartedAtUtc,
+                recordingEndedAtUtc = capture.RecordingEndedAtUtc
+            }, ct: ct);
         return capture;
     }
 
     public async Task<IReadOnlyList<FinishCapture>> GetCapturesAsync(Guid sessionId, CancellationToken ct = default) =>
         (await captureRepo.GetBySessionIdAsync(sessionId, ct)).AsReadOnly();
 
-    public Task UpdateUploadStatusAsync(Guid captureId, UploadStatus status, CancellationToken ct = default) =>
-        captureRepo.UpdateUploadStatusAsync(captureId, status, ct);
+    public async Task UpdateUploadStatusAsync(Guid captureId, UploadStatus status, CancellationToken ct = default)
+    {
+        var capture = await captureRepo.GetByIdAsync(captureId, ct)
+            ?? throw new KeyNotFoundException($"Finish capture {captureId} not found.");
+        var previousStatus = capture.UploadStatus;
+        await captureRepo.UpdateUploadStatusAsync(captureId, status, ct);
+        await auditLog.LogAsync(capture.TimingSessionId, AuditActions.FinishCaptureUploadStatusUpdated,
+            capture.FinishDeviceId,
+            details: new
+            {
+                captureId,
+                previousStatus = previousStatus.ToString(),
+                newStatus = status.ToString()
+            }, ct: ct);
+    }
 }

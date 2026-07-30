@@ -38,6 +38,13 @@ public class RawTimingResultService(
             Status                     = RawResultStatus.Pending
         };
         await resultRepo.CreateRawResultAsync(result, ct);
+        await auditLog.LogAsync(result.TimingSessionId, AuditActions.RawResultCreated,
+            details: new
+            {
+                rawResultId = result.Id,
+                lane = result.Lane,
+                newResultStatus = result.Status.ToString()
+            }, ct: ct);
         return result;
     }
 
@@ -56,11 +63,20 @@ public class RawTimingResultService(
         if (model.AdjustedTimeSeconds.HasValue && model.AdjustedTimeSeconds <= 0)
             throw new ArgumentException("AdjustedTimeSeconds must be greater than 0.");
 
+        var previousStatus = result.Status;
         if (model.AdjustedTimeSeconds.HasValue) result.AdjustedTimeSeconds = model.AdjustedTimeSeconds.Value;
         if (model.ReviewerNote is not null)      result.ReviewerNote = model.ReviewerNote;
         result.Status = RawResultStatus.Reviewed;
 
         await resultRepo.UpdateRawResultAsync(result, ct);
+        await auditLog.LogAsync(result.TimingSessionId, AuditActions.RawResultUpdated,
+            details: new
+            {
+                rawResultId = result.Id,
+                lane = result.Lane,
+                previousResultStatus = previousStatus.ToString(),
+                newResultStatus = result.Status.ToString()
+            }, ct: ct);
         return result;
     }
 
@@ -69,17 +85,35 @@ public class RawTimingResultService(
         var result = await GetResultAsync(resultId, ct);
         if (result.Status == RawResultStatus.Rejected)
             throw new InvalidOperationException("A rejected result must be reviewed before submission.");
+        var previousStatus = result.Status;
         result.Status = RawResultStatus.Submitted;
         await resultRepo.UpdateRawResultAsync(result, ct);
+        await auditLog.LogAsync(result.TimingSessionId, AuditActions.RawResultSubmitted,
+            details: new
+            {
+                rawResultId = result.Id,
+                lane = result.Lane,
+                previousResultStatus = previousStatus.ToString(),
+                newResultStatus = result.Status.ToString()
+            }, ct: ct);
         return result;
     }
 
     public async Task<RawTimingResult> RejectResultAsync(Guid resultId, string note, CancellationToken ct = default)
     {
         var result = await GetResultAsync(resultId, ct);
+        var previousStatus = result.Status;
         result.Status       = RawResultStatus.Rejected;
         result.ReviewerNote = note;
         await resultRepo.UpdateRawResultAsync(result, ct);
+        await auditLog.LogAsync(result.TimingSessionId, AuditActions.RawResultRejected,
+            details: new
+            {
+                rawResultId = result.Id,
+                lane = result.Lane,
+                previousResultStatus = previousStatus.ToString(),
+                newResultStatus = result.Status.ToString()
+            }, ct: ct);
         return result;
     }
 }

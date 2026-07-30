@@ -21,47 +21,80 @@ public class OfflineSyncService(
             ItemCount       = model.Items.Count
         };
         await batchRepo.CreateSyncBatchAsync(batch, ct);
+        await auditLog.LogAsync(batch.TimingSessionId, AuditActions.SyncBatchReceived, batch.DeviceId,
+            details: new { batchId = batch.Id, itemCount = batch.ItemCount }, ct: ct);
 
-        var hasFailure = false;
-        foreach (var itemModel in model.Items)
+        try
         {
-            // Idempotency: skip items already seen
-            if (await itemRepo.ClientGeneratedIdExistsAsync(itemModel.ClientGeneratedId, ct))
-                continue;
-
-            var item = new SyncItem
+            var hasFailure = false;
+            foreach (var itemModel in model.Items)
             {
-                SyncBatchId       = batch.Id,
-                ClientGeneratedId = Guid.Parse(itemModel.ClientGeneratedId),
-                EntityType        = itemModel.EntityType.ToString(),
-                PayloadJson       = itemModel.PayloadJson,
-                Status            = SyncStatus.Pending
-            };
-            await itemRepo.CreateAsync(item, ct);
+                // Idempotency: skip items already seen
+                if (await itemRepo.ClientGeneratedIdExistsAsync(itemModel.ClientGeneratedId, ct))
+                    continue;
 
-            try
-            {
-                await itemRepo.MarkSyncItemCompletedAsync(item.Id, ct);
+                var item = new SyncItem
+                {
+                    SyncBatchId       = batch.Id,
+                    ClientGeneratedId = Guid.Parse(itemModel.ClientGeneratedId),
+                    EntityType        = itemModel.EntityType,
+                    PayloadJson       = itemModel.PayloadJson,
+                    Status            = SyncStatus.Pending
+                };
+                await itemRepo.CreateAsync(item, ct);
+
+                try
+                {
+                    await itemRepo.MarkSyncItemCompletedAsync(item.Id, ct);
+                }
+                catch (Exception)
+                {
+                    hasFailure = true;
+                    await itemRepo.MarkSyncItemFailedAsync(item.Id, "Item processing failed.", ct);
+                }
             }
-            catch (Exception ex)
+
+            if (hasFailure)
             {
-                hasFailure = true;
-                await itemRepo.MarkSyncItemFailedAsync(item.Id, ex.Message, ct);
+                await batchRepo.UpdateBatchStatusAsync(batch.Id, SyncStatus.Failed, "One or more items failed.", ct);
+                await auditLog.LogAsync(batch.TimingSessionId, AuditActions.SyncBatchFailed, batch.DeviceId,
+                    details: new
+                    {
+                        batchId = batch.Id,
+                        itemCount = batch.ItemCount,
+                        failureCategory = "item_processing"
+                    }, ct: ct);
             }
-        }
+            else
+            {
+                await batchRepo.MarkSyncBatchCompletedAsync(batch.Id, ct);
+                await auditLog.LogAsync(batch.TimingSessionId, AuditActions.SyncBatchCompleted, batch.DeviceId,
+                    details: new { batchId = batch.Id, itemCount = batch.ItemCount }, ct: ct);
+            }
 
-        if (hasFailure)
-        {
-            await batchRepo.UpdateBatchStatusAsync(batch.Id, SyncStatus.Failed, "One or more items failed.", ct);
+            return (await batchRepo.GetSyncBatchByIdAsync(batch.Id, ct))!;
         }
-        else
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            await batchRepo.MarkSyncBatchCompletedAsync(batch.Id, ct);
+            await batchRepo.UpdateBatchStatusAsync(batch.Id, SyncStatus.Failed, "Batch processing failed.", ct);
+            await auditLog.LogAsync(batch.TimingSessionId, AuditActions.SyncBatchFailed, batch.DeviceId,
+                details: new
+                {
+                    batchId = batch.Id,
+                    itemCount = batch.ItemCount,
+                    failureCategory = GetFailureCategory(ex)
+                }, ct: ct);
+            throw;
         }
-
-        return (await batchRepo.GetSyncBatchByIdAsync(batch.Id, ct))!;
     }
 
     public Task<SyncBatch?> GetSyncBatchAsync(Guid batchId, CancellationToken ct = default) =>
         batchRepo.GetSyncBatchByIdAsync(batchId, ct);
+
+    private static string GetFailureCategory(Exception exception) => exception switch
+    {
+        FormatException => "invalid_item_identifier",
+        ArgumentException => "invalid_batch_item",
+        _ => "batch_processing"
+    };
 }
