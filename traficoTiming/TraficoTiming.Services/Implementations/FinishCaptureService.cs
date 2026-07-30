@@ -8,10 +8,38 @@ namespace TraficoTiming.Services.Implementations;
 
 public class FinishCaptureService(
     IFinishCaptureRepository captureRepo,
+    ITimingSessionRepository sessionRepo,
+    ITimingDeviceRepository deviceRepo,
+    IRaceStartEventRepository raceStartRepo,
     IAuditLogService auditLog) : IFinishCaptureService
 {
     public async Task<FinishCapture> CreateCaptureAsync(CreateFinishCaptureModel model, CancellationToken ct = default)
     {
+        var session = await sessionRepo.GetByIdAsync(model.TimingSessionId, ct)
+            ?? throw new KeyNotFoundException($"Session {model.TimingSessionId} not found.");
+        if (session.Status != SessionStatus.Running)
+            throw new InvalidOperationException("Finish capture requires a Running session.");
+
+        var finish = await deviceRepo.GetByIdAsync(model.FinishDeviceId, ct)
+            ?? throw new KeyNotFoundException($"Device {model.FinishDeviceId} not found.");
+        if (finish.TimingSessionId != model.TimingSessionId)
+            throw new InvalidOperationException("The Finish device does not belong to this session.");
+        if (finish.DeviceRole != DeviceRole.Finish)
+            throw new InvalidOperationException("The selected device does not have the Finish role.");
+        if (finish.Status != DeviceStatus.Connected)
+            throw new InvalidOperationException("The Finish device must be connected.");
+
+        if (model.RecordingStartedAtUtc is null)
+            throw new ArgumentException("RecordingStartedAtUtc is required.", nameof(model.RecordingStartedAtUtc));
+        if (model.RecordingEndedAtUtc <= model.RecordingStartedAtUtc.Value)
+            throw new ArgumentException("RecordingEndedAtUtc must be later than RecordingStartedAtUtc.", nameof(model.RecordingEndedAtUtc));
+
+        var raceStart = await raceStartRepo.GetLatestBySessionIdAsync(model.TimingSessionId, ct)
+            ?? throw new InvalidOperationException("A race start event is required before finish capture.");
+        // Pre-roll is allowed: recording may begin before the race, but it must continue past the start.
+        if (model.RecordingEndedAtUtc <= raceStart.StartTimestampUtc)
+            throw new InvalidOperationException("The recording interval must end after the race start.");
+
         var capture = new FinishCapture
         {
             TimingSessionId               = model.TimingSessionId,
@@ -19,7 +47,7 @@ public class FinishCaptureService(
             LocalFileId                   = model.LocalFileId,
             FrameRate                     = model.FrameRate ?? 0,
             Resolution                    = model.Resolution ?? string.Empty,
-            RecordingStartedAtUtc         = model.RecordingStartedAtUtc ?? DateTime.UtcNow,
+            RecordingStartedAtUtc         = model.RecordingStartedAtUtc.Value,
             RecordingEndedAtUtc           = model.RecordingEndedAtUtc,
             FinishLineCalibrationDataJson = model.FinishLineCalibrationDataJson,
             UploadStatus                  = UploadStatus.LocalOnly

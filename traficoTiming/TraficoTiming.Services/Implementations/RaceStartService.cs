@@ -10,6 +10,7 @@ public class RaceStartService(
     IRaceStartEventRepository raceStartRepo,
     ITimingSessionRepository sessionRepo,
     ITimingDeviceRepository deviceRepo,
+    IClockSyncRecordRepository clockSyncRepo,
     IAuditLogService auditLog) : IRaceStartService
 {
     public async Task<RaceStartEvent> StartRaceAsync(StartRaceModel model, CancellationToken ct = default)
@@ -23,11 +24,32 @@ public class RaceStartService(
         if (await raceStartRepo.ExistsForSessionAsync(model.TimingSessionId, ct))
             throw new InvalidOperationException("A race start event already exists for this session.");
 
-        if (!await deviceRepo.RoleExistsInSessionAsync(model.TimingSessionId, DeviceRole.Starter, ct))
-            throw new InvalidOperationException("No Starter device is paired to this session.");
+        if (model.StartTimestampUtc == default || model.StartTimestampUtc.Kind != DateTimeKind.Utc)
+            throw new ArgumentException("StartTimestampUtc must be a valid UTC timestamp.", nameof(model.StartTimestampUtc));
 
-        if (!await deviceRepo.RoleExistsInSessionAsync(model.TimingSessionId, DeviceRole.Finish, ct))
-            throw new InvalidOperationException("No Finish device is paired to this session.");
+        var starter = await deviceRepo.GetByIdAsync(model.StarterDeviceId, ct)
+            ?? throw new KeyNotFoundException($"Device {model.StarterDeviceId} not found.");
+        if (starter.TimingSessionId != model.TimingSessionId)
+            throw new InvalidOperationException("The Starter device does not belong to this session.");
+        if (starter.DeviceRole != DeviceRole.Starter)
+            throw new InvalidOperationException("The selected device does not have the Starter role.");
+        if (starter.Status != DeviceStatus.Connected)
+            throw new InvalidOperationException("The Starter device must be connected.");
+
+        var connectedFinishIds = (await deviceRepo.GetFinishDevicesAsync(model.TimingSessionId, ct))
+            .Where(d => d.Status == DeviceStatus.Connected)
+            .Select(d => d.Id)
+            .ToArray();
+        if (connectedFinishIds.Length == 0)
+            throw new InvalidOperationException("At least one connected Finish device is required.");
+
+        if (!await clockSyncRepo.ExistsAcceptedSyncAsync(
+                model.TimingSessionId,
+                model.StarterDeviceId,
+                connectedFinishIds,
+                ClockSyncService.ReadinessThreshold,
+                ct))
+            throw new InvalidOperationException("No accepted clock synchronization exists for the connected Starter and Finish devices.");
 
         var raceStart = new RaceStartEvent
         {

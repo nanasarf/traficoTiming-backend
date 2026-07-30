@@ -63,5 +63,28 @@ public class DevicePairingService(
             ?? throw new KeyNotFoundException($"Device {deviceId} not found.");
         device.Status = DeviceStatus.Disconnected;
         await deviceRepo.UpdateAsync(device, ct);
+
+        var session = await sessionRepo.GetByIdAsync(device.TimingSessionId, ct);
+        if (session is null || session.Status == SessionStatus.Running)
+            return;
+
+        if (session.Status is not (SessionStatus.DevicesPaired or SessionStatus.Ready))
+            return;
+
+        var devices = await deviceRepo.GetDevicesBySessionAsync(device.TimingSessionId, ct);
+        var hasStarter = devices.Any(d => d.DeviceRole == DeviceRole.Starter);
+        var hasFinish = devices.Any(d => d.DeviceRole == DeviceRole.Finish);
+        var hasConnectedStarter = devices.Any(d =>
+            d.DeviceRole == DeviceRole.Starter && d.Status == DeviceStatus.Connected);
+        var hasConnectedFinish = devices.Any(d =>
+            d.DeviceRole == DeviceRole.Finish && d.Status == DeviceStatus.Connected);
+
+        if (session.Status == SessionStatus.Ready && (!hasConnectedStarter || !hasConnectedFinish))
+        {
+            session.Status = hasStarter && hasFinish
+                ? SessionStatus.DevicesPaired
+                : SessionStatus.Created;
+            await sessionRepo.UpdateAsync(session, ct);
+        }
     }
 }

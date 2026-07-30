@@ -70,13 +70,24 @@ public class MappingTests
             .Callback<ClockSyncRecord, CancellationToken>((entity, _) => persisted = entity)
             .ReturnsAsync((ClockSyncRecord entity, CancellationToken _) => entity);
         var sessionRepository = new Mock<ITimingSessionRepository>();
-        var service = new ClockSyncService(clockRepository.Object, sessionRepository.Object, _auditLog.Object);
+        var deviceRepository = new Mock<ITimingDeviceRepository>();
+        var sessionId = Guid.NewGuid();
+        var starterId = Guid.NewGuid();
+        var finishId = Guid.NewGuid();
+        sessionRepository.Setup(x => x.GetByIdAsync(sessionId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TimingSession { Id = sessionId });
+        deviceRepository.Setup(x => x.GetByIdAsync(starterId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TimingDevice { Id = starterId, TimingSessionId = sessionId, DeviceRole = DeviceRole.Starter });
+        deviceRepository.Setup(x => x.GetByIdAsync(finishId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TimingDevice { Id = finishId, TimingSessionId = sessionId, DeviceRole = DeviceRole.Finish });
+        var service = new ClockSyncService(
+            clockRepository.Object, sessionRepository.Object, deviceRepository.Object, _auditLog.Object);
 
         await service.SyncClocksAsync(new ClockSyncModel
         {
-            TimingSessionId = Guid.NewGuid(),
-            StarterDeviceId = Guid.NewGuid(),
-            FinishDeviceId = Guid.NewGuid(),
+            TimingSessionId = sessionId,
+            StarterDeviceId = starterId,
+            FinishDeviceId = finishId,
             OffsetMs = 1.234m,
             RoundTripDelayMs = 5.678m,
             DriftMs = null,
@@ -98,6 +109,7 @@ public class MappingTests
         var service = new ClockSyncService(
             Mock.Of<IClockSyncRecordRepository>(),
             Mock.Of<ITimingSessionRepository>(),
+            Mock.Of<ITimingDeviceRepository>(),
             _auditLog.Object);
         var model = new ClockSyncModel { SyncQualityScore = decimal.Parse(value) };
 
@@ -118,16 +130,32 @@ public class MappingTests
         sessionRepository.Setup(x => x.GetByIdAsync(sessionId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new TimingSession { Id = sessionId, Status = SessionStatus.Ready });
         var deviceRepository = new Mock<ITimingDeviceRepository>();
-        deviceRepository.Setup(x => x.RoleExistsInSessionAsync(sessionId, It.IsAny<DeviceRole>(), It.IsAny<CancellationToken>()))
+        var starterId = Guid.NewGuid();
+        deviceRepository.Setup(x => x.GetByIdAsync(starterId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TimingDevice
+            {
+                Id = starterId, TimingSessionId = sessionId,
+                DeviceRole = DeviceRole.Starter, Status = DeviceStatus.Connected
+            });
+        deviceRepository.Setup(x => x.GetFinishDevicesAsync(sessionId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new TimingDevice
+            {
+                Id = Guid.NewGuid(), TimingSessionId = sessionId,
+                DeviceRole = DeviceRole.Finish, Status = DeviceStatus.Connected
+            }]);
+        var clockRepository = new Mock<IClockSyncRecordRepository>();
+        clockRepository.Setup(x => x.ExistsAcceptedSyncAsync(
+                sessionId, starterId, It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<decimal>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
 
         var service = new RaceStartService(
-            raceRepository.Object, sessionRepository.Object, deviceRepository.Object, _auditLog.Object);
+            raceRepository.Object, sessionRepository.Object, deviceRepository.Object,
+            clockRepository.Object, _auditLog.Object);
 
         var result = await service.StartRaceAsync(new StartRaceModel
         {
             TimingSessionId = sessionId,
-            StarterDeviceId = Guid.NewGuid(),
+            StarterDeviceId = starterId,
             StartTimestampUtc = timestamp
         });
 
@@ -143,12 +171,31 @@ public class MappingTests
         repository.Setup(x => x.CreateAsync(It.IsAny<FinishCapture>(), It.IsAny<CancellationToken>()))
             .Callback<FinishCapture, CancellationToken>((entity, _) => persisted = entity)
             .ReturnsAsync((FinishCapture entity, CancellationToken _) => entity);
-        var service = new FinishCaptureService(repository.Object, _auditLog.Object);
+        var sessionId = Guid.NewGuid();
+        var finishId = Guid.NewGuid();
         var started = new DateTime(2026, 7, 29, 12, 0, 0, DateTimeKind.Utc);
         var ended = started.AddSeconds(12);
+        var sessionRepository = new Mock<ITimingSessionRepository>();
+        sessionRepository.Setup(x => x.GetByIdAsync(sessionId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TimingSession { Id = sessionId, Status = SessionStatus.Running });
+        var deviceRepository = new Mock<ITimingDeviceRepository>();
+        deviceRepository.Setup(x => x.GetByIdAsync(finishId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TimingDevice
+            {
+                Id = finishId, TimingSessionId = sessionId,
+                DeviceRole = DeviceRole.Finish, Status = DeviceStatus.Connected
+            });
+        var raceRepository = new Mock<IRaceStartEventRepository>();
+        raceRepository.Setup(x => x.GetLatestBySessionIdAsync(sessionId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new RaceStartEvent { TimingSessionId = sessionId, StartTimestampUtc = started.AddSeconds(1) });
+        var service = new FinishCaptureService(
+            repository.Object, sessionRepository.Object, deviceRepository.Object,
+            raceRepository.Object, _auditLog.Object);
 
         await service.CreateCaptureAsync(new CreateFinishCaptureModel
         {
+            TimingSessionId = sessionId,
+            FinishDeviceId = finishId,
             FrameRate = 59.940m,
             RecordingStartedAtUtc = started,
             RecordingEndedAtUtc = ended
